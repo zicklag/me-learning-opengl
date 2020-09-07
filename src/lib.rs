@@ -43,17 +43,20 @@ pub fn with_window<RndrHndlr: RenderHandler + 'static>() {
 
     el.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
+
+        // Draw the graphics
+        handler.draw(&mut gl);
+        windowed_context.swap_buffers().unwrap();
+
         match event {
             Event::LoopDestroyed => {
                 return;
             }
             Event::MainEventsCleared => {
-                windowed_context.window().request_redraw();
+                // windowed_context.window().request_redraw();
             }
-            Event::RedrawRequested(_) => {
-                handler.draw(&mut gl);
-                windowed_context.swap_buffers().unwrap();
-            }
+            // Event::RedrawRequested(_) => {
+            // }
             Event::WindowEvent { ref event, .. } => match event {
                 WindowEvent::KeyboardInput { input, .. } => {
                     if let Some(keycode) = input.virtual_keycode {
