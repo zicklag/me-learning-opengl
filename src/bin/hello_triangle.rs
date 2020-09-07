@@ -99,8 +99,8 @@ impl RenderHandler for HelloTriangle {
                 0,
             );
 
-            gl.bind_buffer(glow::ARRAY_BUFFER, None);
-            gl.bind_vertex_array(None);
+            // Draw wireframe instead of solid
+            // gl.polygon_mode(glow::FRONT_AND_BACK, glow::LINE);
 
             Self {
                 shader_program,
