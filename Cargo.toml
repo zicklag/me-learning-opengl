@@ -1,0 +1,17 @@
+[package]
+name = "me-learning-opengl"
+version = "0.1.0"
+authors = ["Zicklag <zicklag@katharostech.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cgmath = "0.16.1"
+image = "0.19.0"
+# only needed from chapter 3 on
+tobj = "0.1.6"
+num = "0.2.0"
+rand = "0.5.5"
+glutin = "0.24.1"
+glow = "0.6.0"
