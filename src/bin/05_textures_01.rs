@@ -1,6 +1,6 @@
 use glow::HasContext;
 use me_learning_opengl::{RenderHandler, SliceAsBytes};
-use std::time::Instant;
+use std::{path::Path, time::Instant};
 
 const VERTEX_SHADER_SRC: &str = include_str!("textures_01/vertex.glsl");
 const FRAGMENT_SHADER_SRC: &str = include_str!("textures_01/fragment.glsl");
@@ -25,6 +25,8 @@ struct Textures01 {
     /// Vertex Array Object: It's like a vertex attributes configuration
     /// "preset"
     vao: u32,
+    texture0: u32,
+    texture1: u32,
     /// The shader program uniform for the time the program has been running
     time_uniform: u32,
     /// The instant that the renderer was initialized
@@ -166,52 +168,8 @@ impl RenderHandler for Textures01 {
             // Enable the texture coordinate vertex attribute
             gl.enable_vertex_attrib_array(2);
 
-            // Open the texture image
-            let img = image::open("./assets/wall.jpg").unwrap();
-            let img = match img {
-                image::DynamicImage::ImageRgb8(img) => img,
-                _ => unimplemented!("Image format not implemented"),
-            };
-            let width = img.width();
-            let height = img.height();
-            let pixels = img.into_raw();
-
-            // Create the GL texture for our rectangle
-            let texture = gl.create_texture().unwrap();
-            gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-
-            // Set our texure parameters
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::REPEAT as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::REPEAT as i32);
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_MIN_FILTER,
-                glow::LINEAR as i32,
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_MAG_FILTER,
-                glow::LINEAR as i32,
-            );
-
-            // Set our image data
-            gl.tex_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                glow::RGB as i32,
-                width as i32,
-                height as i32,
-                0,
-                glow::RGB,
-                glow::UNSIGNED_BYTE,
-                Some(&pixels),
-            );
-
-            // Generate mipmaps
-            gl.generate_mipmap(glow::TEXTURE_2D);
-
-            // Delete our pixels
-            drop(pixels);
+            let texture0 = load_and_bind_texture(gl, glow::TEXTURE0, "./assets/awesomeface.png");
+            let texture1 = load_and_bind_texture(gl, glow::TEXTURE1, "./assets/wall.jpg");
 
             // Draw wireframe instead of solid
             // gl.polygon_mode(glow::FRONT_AND_BACK, glow::LINE);
@@ -220,6 +178,8 @@ impl RenderHandler for Textures01 {
                 shader_program,
                 vao,
                 time_uniform,
+                texture0,
+                texture1,
                 start_time: Instant::now(),
             }
         }
@@ -239,6 +199,22 @@ impl RenderHandler for Textures01 {
             gl.uniform_1_f32(
                 Some(&self.time_uniform),
                 self.start_time.elapsed().as_secs_f32(),
+            );
+
+            gl.active_texture(glow::TEXTURE0);
+            gl.bind_texture(glow::TEXTURE_2D, Some(self.texture0));
+            gl.active_texture(glow::TEXTURE1);
+            gl.bind_texture(glow::TEXTURE_2D, Some(self.texture1));
+
+            gl.uniform_1_i32(
+                gl.get_uniform_location(self.shader_program, "imageTexture1")
+                    .as_ref(),
+                0,
+            );
+            gl.uniform_1_i32(
+                gl.get_uniform_location(self.shader_program, "imageTexture2")
+                    .as_ref(),
+                1,
             );
 
             // Bind our VAO which contains our vertex attribute and buffer information
@@ -269,5 +245,60 @@ fn handle_program_link_errors(gl: &mut glow::Context, program: u32) {
             eprintln!("Shader link error: {}", gl.get_program_info_log(program));
             std::process::exit(1);
         }
+    }
+}
+
+fn load_and_bind_texture<P: AsRef<Path>>(gl: &mut glow::Context, unit: u32, path: P) -> u32 {
+    unsafe {
+        // Select the texture unit
+        gl.active_texture(unit);
+
+        // Open the texture image
+        let img = image::open(path).unwrap();
+        let (width, height, pixels, format) = match img {
+            image::DynamicImage::ImageRgb8(img) => {
+                (img.width(), img.height(), img.into_raw(), glow::RGB)
+            }
+            image::DynamicImage::ImageRgba8(img) => {
+                (img.width(), img.height(), img.into_raw(), glow::RGBA)
+            }
+            _ => unimplemented!("Image format not implemented"),
+        };
+
+        // Create the GL texture for our rectangle
+        let texture = gl.create_texture().unwrap();
+        gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+
+        // Set our texure parameters
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::REPEAT as i32);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::REPEAT as i32);
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MIN_FILTER,
+            glow::LINEAR as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MAG_FILTER,
+            glow::LINEAR as i32,
+        );
+
+        // Set our image data
+        gl.tex_image_2d(
+            glow::TEXTURE_2D,
+            0,
+            format as i32,
+            width as i32,
+            height as i32,
+            0,
+            format,
+            glow::UNSIGNED_BYTE,
+            Some(&pixels),
+        );
+
+        // Generate mipmaps
+        gl.generate_mipmap(glow::TEXTURE_2D);
+
+        texture
     }
 }
