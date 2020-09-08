@@ -17,12 +17,6 @@ const TRI_VERTICE_INDEXES: &[u32] = &[
     0, 1, 2, // First triangle
     0, 2, 3, // Second triangle
 ];
-const TEX_COORDS: &[f32] = &[
-    0., 0., // bottom left
-    0., 1., // bottom right
-    1., 1., // top right
-    1., 0., // top left
-];
 
 struct Shaders02 {
     /// A compiled and linked shader program: Combines the vertex shader and the
