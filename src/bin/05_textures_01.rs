@@ -2,23 +2,23 @@ use glow::HasContext;
 use me_learning_opengl::{RenderHandler, SliceAsBytes};
 use std::time::Instant;
 
-const VERTEX_SHADER_SRC: &str = include_str!("shaders_02/vertex.glsl");
-const FRAGMENT_SHADER_SRC: &str = include_str!("shaders_02/fragment.glsl");
+const VERTEX_SHADER_SRC: &str = include_str!("textures_01/vertex.glsl");
+const FRAGMENT_SHADER_SRC: &str = include_str!("textures_01/fragment.glsl");
 
 // Make a square
 const TRI_VERTICES: &[f32] = &[
-    // Positions        // Colors
-    -0.5, -0.5, 0.0, 1., 0., 0., 1., // bottom left
-    0.5, -0.5, 0.0, 0., 1., 0., 1., // bottom right
-    0.5, 0.5, 0.0, 0., 0., 1., 1., // top right
-    -0.5, 0.5, 0.0, 0.5, 0.5, 0.5, 1., // top left
+    // Positions (3)       // Colors (4)   // TexCoords (2)
+    -0.5, -0.5, 0.0, 1., 0., 0., 1., 0., 0., // bottom left
+    0.5, -0.5, 0.0, 0., 1., 0., 1., 0., 1., // bottom right
+    0.5, 0.5, 0.0, 0., 0., 1., 1., 1., 1., // top right
+    -0.5, 0.5, 0.0, 0.5, 0.5, 0.5, 1., 1., 0., // top left
 ];
 const TRI_VERTICE_INDEXES: &[u32] = &[
     0, 1, 2, // First triangle
     0, 2, 3, // Second triangle
 ];
 
-struct Shaders02 {
+struct Textures01 {
     /// A compiled and linked shader program: Combines the vertex shader and the
     /// fragment shader into a usable shader program.
     shader_program: u32,
@@ -31,7 +31,7 @@ struct Shaders02 {
     start_time: Instant,
 }
 
-impl RenderHandler for Shaders02 {
+impl RenderHandler for Textures01 {
     fn init(gl: &mut glow::Context) -> Self {
         unsafe {
             //
@@ -122,8 +122,8 @@ impl RenderHandler for Shaders02 {
                 false,
                 // The space between each vertex attribute and the next ( which
                 // is the number of floats in the position + the number of
-                // floats in the color )
-                7 * std::mem::size_of::<f32>() as i32,
+                // floats in the color + number of floats in the texture coordinate )
+                9 * std::mem::size_of::<f32>() as i32,
                 // The offset since the beginning of the buffer to look for the attribute
                 0,
             );
@@ -134,9 +134,21 @@ impl RenderHandler for Shaders02 {
                 4,
                 glow::FLOAT,
                 false,
-                7 * std::mem::size_of::<f32>() as i32,
-                // Offset the lenght of the 3 floats in the position vector
+                9 * std::mem::size_of::<f32>() as i32,
+                // Offset the length of the 3 floats in the position vector
                 3 * std::mem::size_of::<f32>() as i32,
+            );
+
+            // Describe our vertex texture coordinate data format
+            gl.vertex_attrib_pointer_f32(
+                2,
+                2,
+                glow::FLOAT,
+                false,
+                9 * std::mem::size_of::<f32>() as i32,
+                // Offset the length of the 3 floats in the position and the
+                // four floats in the vertex color
+                7 * std::mem::size_of::<f32>() as i32,
             );
 
             // Enable the position vertex attribute
@@ -150,6 +162,56 @@ impl RenderHandler for Shaders02 {
                 // also corresponds to `location = 1` in the vertex shader */
                 1,
             );
+
+            // Enable the texture coordinate vertex attribute
+            gl.enable_vertex_attrib_array(2);
+
+            // Open the texture image
+            let img = image::open("./assets/wall.jpg").unwrap();
+            let img = match img {
+                image::DynamicImage::ImageRgb8(img) => img,
+                _ => unimplemented!("Image format not implemented"),
+            };
+            let width = img.width();
+            let height = img.height();
+            let pixels = img.into_raw();
+
+            // Create the GL texture for our rectangle
+            let texture = gl.create_texture().unwrap();
+            gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+
+            // Set our texure parameters
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::REPEAT as i32);
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::REPEAT as i32);
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+
+            // Set our image data
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGB as i32,
+                width as i32,
+                height as i32,
+                0,
+                glow::RGB,
+                glow::UNSIGNED_BYTE,
+                Some(&pixels),
+            );
+
+            // Generate mipmaps
+            gl.generate_mipmap(glow::TEXTURE_2D);
+
+            // Delete our pixels
+            drop(pixels);
 
             // Draw wireframe instead of solid
             // gl.polygon_mode(glow::FRONT_AND_BACK, glow::LINE);
@@ -189,7 +251,7 @@ impl RenderHandler for Shaders02 {
 }
 
 fn main() {
-    me_learning_opengl::with_window::<Shaders02>();
+    me_learning_opengl::with_window::<Textures01>();
 }
 
 fn handle_shader_compile_errors(gl: &mut glow::Context, shader: u32) {
