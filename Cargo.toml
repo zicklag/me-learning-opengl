@@ -13,5 +13,7 @@ image = "0.23.9"
 tobj = "0.1.6"
 num = "0.2.0"
 rand = "0.5.5"
-glutin = "0.24.1"
 glow = "0.6.0"
+# We must match surfman's supported winit version
+winit = "<0.19.4"
+surfman = { version = "0.3.0", features = ["sm-x11"] }

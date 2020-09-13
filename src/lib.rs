@@ -1,7 +1,12 @@
-use glutin::{
-    event::{Event, VirtualKeyCode, WindowEvent},
-    event_loop::ControlFlow,
+use surfman::{
+    Connection, ContextAttributeFlags, ContextAttributes, GLVersion, SurfaceAccess, SurfaceType,
 };
+use winit::{
+    dpi::PhysicalSize, DeviceEvent, Event, EventsLoop, KeyboardInput, VirtualKeyCode,
+    WindowBuilder, WindowEvent,
+};
+
+surfman::declare_surfman!();
 
 pub trait RenderHandler {
     fn init(gl: &mut glow::Context) -> Self;
@@ -25,57 +30,103 @@ impl<T: AsRef<[U]>, U> SliceAsBytes<U> for T {
 }
 
 pub fn with_window<RndrHndlr: RenderHandler + 'static>() {
-    let el = glutin::event_loop::EventLoop::new();
-    let wb = glutin::window::WindowBuilder::new()
-        .with_title("Hello Window")
-        .with_inner_size(glutin::dpi::LogicalSize::new(1024.0, 768.0));
-    let windowed_context = glutin::ContextBuilder::new()
-        .build_windowed(wb, &el)
+    // Create the window event loop
+    let mut event_loop = EventsLoop::new();
+    // Obtain the screen scaling factor
+    let scale_factor = event_loop.get_primary_monitor().get_hidpi_factor();
+    // Create a new logical size for the window based on the desired physical size
+    let logical_size = PhysicalSize::new(800f64, 600f64).to_logical(scale_factor);
+    // Create a window
+    let window = WindowBuilder::new()
+        .with_title("Me Learning OpenGL")
+        .with_dimensions(logical_size)
+        .build(&event_loop)
         .unwrap();
 
-    let windowed_context = unsafe { windowed_context.make_current().unwrap() };
+    // Show the window
+    window.show();
 
-    let mut gl = unsafe {
-        glow::Context::from_loader_function(|s| windowed_context.get_proc_address(s) as *const _)
+    // Create a connection to the graphics provider from our winit window
+    let conn = Connection::from_winit_window(&window).unwrap();
+    // Create a native widget to attach the visible render surface to
+    let native_widget = conn
+        .create_native_widget_from_winit_window(&window)
+        .unwrap();
+    // Create a hardware adapter that we can used to create graphics devices from
+    let adapter = conn.create_hardware_adapter().unwrap();
+    // Create a graphics device using our hardware adapter
+    let mut device = conn.create_device(&adapter).unwrap();
+
+    // Define the attributes for our OpenGL context
+    let context_attributes = ContextAttributes {
+        version: GLVersion::new(3, 3),
+        flags: ContextAttributeFlags::ALPHA
+            | ContextAttributeFlags::DEPTH
+            | ContextAttributeFlags::STENCIL,
     };
 
+    // Create a context descriptor based on our defined context attributes
+    let context_descriptor = device
+        .create_context_descriptor(&context_attributes)
+        .unwrap();
+    // Define the surface type for our graphics surface ( a surface based on a native widget, i.e. not an offscreen surface )
+    let surface_type = SurfaceType::Widget { native_widget };
+    // Create an OpenGL context
+    let mut context = device.create_context(&context_descriptor, None).unwrap();
+
+    // Create a surface that can be accessed only from the GPU 
+    let surface = device
+        .create_surface(&context, SurfaceAccess::GPUOnly, surface_type)
+        .unwrap();
+
+    // Bind our surface to our create GL context
+    device
+        .bind_surface_to_context(&mut context, surface)
+        .unwrap();
+    // Make our context the current context
+    device.make_context_current(&context).unwrap();
+
+    // Get a pointer to the OpenGL functions
+    let mut gl = unsafe {
+        glow::Context::from_loader_function(|s| device.get_proc_address(&context, s) as *const _)
+    };
+
+    // Instantiate our rendering handler
     let mut handler = RndrHndlr::init(&mut gl);
 
-    el.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
-
+    // Loop through render events
+    let mut exit = false;
+    while !exit {
         // Draw the graphics
         handler.draw(&mut gl);
-        windowed_context.swap_buffers().unwrap();
+        let mut surface = device
+            .unbind_surface_from_context(&mut context)
+            .unwrap()
+            .unwrap();
+        device.present_surface(&context, &mut surface).unwrap();
+        device.bind_surface_to_context(&mut context, surface).unwrap();
 
-        match event {
-            Event::LoopDestroyed => {
-                return;
+        // Handle events
+        event_loop.poll_events(|event| match event {
+            Event::WindowEvent {
+                event: WindowEvent::Destroyed,
+                ..
             }
-            Event::MainEventsCleared => {
-                // windowed_context.window().request_redraw();
+            | Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
             }
-            // Event::RedrawRequested(_) => {
-            // }
-            Event::WindowEvent { ref event, .. } => match event {
-                WindowEvent::KeyboardInput { input, .. } => {
-                    if let Some(keycode) = input.virtual_keycode {
-                        if keycode == VirtualKeyCode::Escape {
-                            *control_flow = ControlFlow::Exit;
-                        }
-                    }
-                }
-                WindowEvent::Resized(physical_size) => {
-                    windowed_context.resize(*physical_size);
-                }
-                WindowEvent::CloseRequested => {
-                    handler.exit(&mut gl);
+            | Event::DeviceEvent {
+                event:
+                    DeviceEvent::Key(KeyboardInput {
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    }),
+                ..
+            } => exit = true,
+            _ => {}
+        });
+    }
 
-                    *control_flow = ControlFlow::Exit
-                }
-                _ => (),
-            },
-            _ => (),
-        }
-    });
+    device.destroy_context(&mut context).unwrap();
 }
